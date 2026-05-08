@@ -2,7 +2,6 @@ import sys
 import os
 
 #finding a path to the folder
-#maybe add desktop on the path
 sys.path.append("C:/TD Final Project/SRC")
 
 
@@ -17,60 +16,87 @@ importlib.reload(Core.MayaUtilities)
 
 class AutoOverlapper:
     def __init__(self):
-        # store name of the base controller the user picks
+      
         self.baseController = ""
-        # how many frames of delay to add per controller
+    
         self.delay = 2
 
     def SetBaseController(self, name):
-        # Save the base controller name
+     
         self.baseController = name
         print("Base controller is now: " + name)
 
     def SetDelay(self, amount):
-        # Save the delay amount
+      
         self.delay = amount
 
+    def IsController(self, obj):
+   
+        shapes = mc.listRelatives(obj, shapes=True) or []
+        for shape in shapes:
+            if mc.nodeType(shape) == "nurbsCurve":
+                return True
+
+        return False
+
     def GetControllerChain(self):
-        # Start the chain with just the base controller
+   
         chain = [self.baseController]
         current = self.baseController
 
-        # Keep looking for children until there are none left
+   
         while True:
-            # Look for child transforms under the current controller
             children = mc.listRelatives(current, children=True, type="transform") or []
 
-            # If no children found, we are at the end of the chain
             if not children:
                 break
 
-            # Move to the first child and add it to the chain
-            current = children[0]
+            controllerChildren = [c for c in children if self.IsController(c)]
+
+            if not controllerChildren:
+                break
+
+    
+            if len(controllerChildren) == 1:
+                current = controllerChildren[0]
+
+        
+            else:
+                bestChild = controllerChildren[0]
+                mostChildren = 0
+
+                for child in controllerChildren:
+                    childCount = len(mc.listRelatives(child, children=True, type="transform") or [])
+                    if childCount > mostChildren:
+                        mostChildren = childCount
+                        bestChild = child
+
+                current = bestChild
+
             chain.append(current)
 
         return chain
 
     def GetKeyframeTimes(self, controller):
-        # Check all three rotation axes for keyframes
+      
         attrs = [
             controller + ".rotateX",
             controller + ".rotateY",
             controller + ".rotateZ"
         ]
 
-        # Use a set so we don't store duplicate frame numbers
+      
         allTimes = set()
 
         for attr in attrs:
             keys = mc.keyframe(attr, query=True, timeChange=True) or []
             allTimes.update(keys)
 
-        # Return the frame numbers sorted from smallest to largest
+      
         return sorted(allTimes)
 
     def GetRotationAtTime(self, controller, time):
-        # Read the X, Y, Z rotation values at a specific frame
+  
         rx = mc.getAttr(controller + ".rotateX", time=time)
         ry = mc.getAttr(controller + ".rotateY", time=time)
         rz = mc.getAttr(controller + ".rotateZ", time=time)
@@ -79,39 +105,33 @@ class AutoOverlapper:
     def ApplyOverlap(self):
         print("Starting overlap!")
 
-        # Get the full list of controllers in the chain
         chain = self.GetControllerChain()
 
-        # We need at least 2 controllers to do anything
         if len(chain) < 2:
             mc.warning("Need at least 2 controllers in the chain.")
             return
 
         print("Found " + str(len(chain)) + " controllers: " + str(chain))
 
-        # The base controller is the one we copy keyframes from
         baseCtrl = chain[0]
         keyframeTimes = self.GetKeyframeTimes(baseCtrl)
 
-        # If there are no keyframes on the base controller, stop
         if not keyframeTimes:
             mc.warning("No rotation keyframes found on: " + baseCtrl)
             return
-
-        # Loop through every controller after the base
+        
         for i in range(1, len(chain)):
             childCtrl = chain[i]
-
-            # The further down the chain, the bigger the delay
+           
             totalDelay = self.delay * i
 
-            # Delete any existing rotation keys on this controller
             for axis in ["rotateX", "rotateY", "rotateZ"]:
                 existingKeys = mc.keyframe(childCtrl + "." + axis, query=True, timeChange=True) or []
                 if existingKeys:
                     mc.cutKey(childCtrl + "." + axis, clear=True)
 
-            # Copy each keyframe from the base controller but shift it forward in time
+                mc.setAttr(childCtrl + "." + axis, 0)
+
             for t in keyframeTimes:
                 rx, ry, rz = self.GetRotationAtTime(baseCtrl, t)
                 newTime = t + totalDelay
@@ -124,15 +144,16 @@ class AutoOverlapper:
         print("Overlap done!")
 
     def ClearOverlap(self):
-        # Get the full chain
+      
         chain = self.GetControllerChain()
 
-        # Delete rotation keys on everything except the base controller
         for ctrl in chain[1:]:
             for axis in ["rotateX", "rotateY", "rotateZ"]:
                 existingKeys = mc.keyframe(ctrl + "." + axis, query=True, timeChange=True) or []
                 if existingKeys:
                     mc.cutKey(ctrl + "." + axis, clear=True)
+
+                mc.setAttr(ctrl + "." + axis, 0)
 
         print("Overlap keys cleared.")
 
@@ -142,39 +163,39 @@ class AutoOverlapperWidget(MayaWidget):
     def __init__(self):
         super().__init__()
 
-        # Set the window title
+       
         self.setWindowTitle("Auto-Overlapper")
 
-        # Create the overlapper object that does all the work
+       
         self.overlapper = AutoOverlapper()
 
-        # Create the main layout that holds everything
+       
         self.mainLayout = QVBoxLayout()
         self.setLayout(self.mainLayout)
 
-        # Add a helpful label at the top
+       
         self.mainLayout.addWidget(QLabel("Pick your base controller, then hit Apply Overlap."))
 
-        # Create a row for the base controller picker
+       
         self.controllerRow = QHBoxLayout()
         self.mainLayout.addLayout(self.controllerRow)
         self.controllerRow.addWidget(QLabel("Base Controller:"))
 
-        # Text box that shows the name of the picked controller
+      
         self.controllerNameBox = QLineEdit()
         self.controllerRow.addWidget(self.controllerNameBox)
 
-        # Button to grab whatever is selected in Maya
+        
         self.pickBtn = QPushButton("Pick Selected")
         self.pickBtn.clicked.connect(self.PickBtnClicked)
         self.controllerRow.addWidget(self.pickBtn)
 
-        # Create a row for the delay setting
+        
         self.delayRow = QHBoxLayout()
         self.mainLayout.addLayout(self.delayRow)
         self.delayRow.addWidget(QLabel("Delay Per Controller (frames):"))
 
-        # Number box for choosing the delay amount
+       
         self.delayBox = QSpinBox()
         self.delayBox.setMinimum(1)
         self.delayBox.setMaximum(10)
@@ -182,46 +203,46 @@ class AutoOverlapperWidget(MayaWidget):
         self.delayBox.valueChanged.connect(self.DelayChanged)
         self.delayRow.addWidget(self.delayBox)
 
-        # Button to apply the overlap
+      
         self.applyBtn = QPushButton("Apply Overlap")
         self.applyBtn.clicked.connect(self.ApplyBtnClicked)
         self.mainLayout.addWidget(self.applyBtn)
 
-        # Button to clear the overlap
+    
         self.clearBtn = QPushButton("Clear Overlap")
         self.clearBtn.clicked.connect(self.ClearBtnClicked)
         self.mainLayout.addWidget(self.clearBtn)
 
     def PickBtnClicked(self):
-        # Get whatever transform the user has selected in Maya
+       
         selected = mc.ls(selection=True, type="transform")
 
         if selected:
-            # Put the name in the text box and tell the overlapper
+           
             self.controllerNameBox.setText(selected[0])
             self.overlapper.SetBaseController(selected[0])
         else:
             mc.warning("Please select a controller first.")
 
     def DelayChanged(self):
-        # Update the delay whenever the number box changes
+      
         self.overlapper.SetDelay(self.delayBox.value())
 
     def ApplyBtnClicked(self):
-        # Make sure the overlapper has the latest values from the UI
+        
         self.overlapper.SetBaseController(self.controllerNameBox.text())
         self.overlapper.SetDelay(self.delayBox.value())
 
-        # Wrap in an undo chunk so the user can Ctrl+Z the whole thing
+      
         mc.undoInfo(openChunk=True)
         self.overlapper.ApplyOverlap()
         mc.undoInfo(closeChunk=True)
 
     def ClearBtnClicked(self):
-        # Make sure the overlapper knows which controller we are clearing
+       
         self.overlapper.SetBaseController(self.controllerNameBox.text())
 
-        # Wrap in an undo chunk so the user can Ctrl+Z the whole thing
+       
         mc.undoInfo(openChunk=True)
         self.overlapper.ClearOverlap()
         mc.undoInfo(closeChunk=True)
@@ -231,7 +252,7 @@ class AutoOverlapperWidget(MayaWidget):
 
 
 def Run():
-    # Create the window and show it
+   
     window = AutoOverlapperWidget()
     window.show()
 

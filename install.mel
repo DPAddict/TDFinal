@@ -1,0 +1,43 @@
+global proc PathLocator() {}; 
+string $installFileInfo = `whatIs PathLocator`;
+string $installerPath = `substring $installFileInfo 25 999`; 
+string $pluginDir = `dirname $installerPath`;
+
+string $SRCDir = $pluginDir + "/SRC/";
+string $ToolsDir = $SRCDir + "Tools/";
+string $AssetsDir = $pluginDir + "/Assets/";
+string $defualtIconName = "defualt.png";
+
+global proc string GetIconPathForScript(string $scriptName)
+{
+    global string $AssetsDir;
+    string $iconPath = $AssetsDir + $scriptName + ".png";
+    if(`filetest -f $iconPath`)
+    {
+        return $iconPath;
+    }
+    global string $defualtIconName;
+    return $AssetsDir + $defualtIconName;
+}
+
+global proc AddPluginToShelf(string $scriptName, string $Label)
+{
+    global string $SRCDir;
+    global string $ToolsDir;
+    global string $AssetsDir;
+
+    string $iconPath = GetIconPathForScript($scriptName);
+
+    string $addPathCmd = "import sys\n";
+    $addPathCmd += "if \"" + $SRCDir + "\" not in sys.path:\n";
+    $addPathCmd += "\tsys.path.append(\"" + $SRCDir + "\")\n";
+
+    string $command = $addPathCmd +"exec(open(\"" + $ToolsDir + $scriptName + ".py" + "\"))";
+
+    string $currentShelf = `tabLayout -q -selectTab "ShelfLayout"`;
+    setParent $currentShelf;
+  
+  shelfButton -c $command -stp "python" -image $iconPath -l $Label -iol $Label;
+}
+
+AddPluginToShelf("AutoOverlapper", "Auto OverLapper");
