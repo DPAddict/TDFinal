@@ -32,8 +32,8 @@ global proc AddPluginToShelf(string $scriptName, string $Label)
     $addPathCmd += "if \"" + $SRCDir + "\" not in sys.path:\n";
     $addPathCmd += "\tsys.path.append(\"" + $SRCDir + "\")\n";
 
-    string $command = $addPathCmd +"exec(open(\"" + $ToolsDir + $scriptName + ".py" + "\"))";
-
+    string $command = $addPathCmd + "exec(open(\"" + $ToolsDir + $scriptName + ".py\").read())";
+    
     string $currentShelf = `tabLayout -q -selectTab "ShelfLayout"`;
     setParent $currentShelf;
   
